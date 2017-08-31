@@ -12599,11 +12599,9 @@ namespace ts {
         function getTypeForThisExpressionFromJSDoc(node: Node) {
             const jsdocType = getJSDocType(node);
             if (jsdocType && jsdocType.kind === SyntaxKind.JSDocFunctionType) {
-                const jsDocFunctionType = <JSDocFunctionType>jsdocType;
-                if (jsDocFunctionType.parameters.length > 0 &&
-                    jsDocFunctionType.parameters[0].name &&
-                    (jsDocFunctionType.parameters[0].name as Identifier).escapedText === "this") {
-                    return getTypeFromTypeNode(jsDocFunctionType.parameters[0].type);
+                const { parameters } = <JSDocFunctionType>jsdocType;
+                if (parameters.length > 0 && parameters[0].sort === JSDocFunctionTypeParameterDeclarationKind.This) {
+                    return getTypeFromTypeNode(parameters[0].type);
                 }
             }
         }
@@ -22395,7 +22393,8 @@ namespace ts {
                 case SyntaxKind.JSDocParameterTag:
                     return checkSourceElement((node as JSDocParameterTag).typeExpression);
                 case SyntaxKind.JSDocFunctionType:
-                    checkSignatureDeclaration(node as JSDocFunctionType);
+                    //JSDOcFunctionType isn't a SignatureDeclaration, but it has enough in common.
+                    checkSignatureDeclaration(node as JSDocFunctionType as any as SignatureDeclaration);
                     // falls through
                 case SyntaxKind.JSDocVariadicType:
                 case SyntaxKind.JSDocNonNullableType:

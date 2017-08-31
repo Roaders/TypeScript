@@ -9,7 +9,6 @@ namespace ts {
         Type  = 1 << 2,
         RequireCompleteParameterList = 1 << 3,
         IgnoreMissingOpenBrace = 1 << 4,
-        JSDoc = 1 << 5,
     }
 
     let NodeConstructor: new (kind: SyntaxKind, pos: number, end: number) => Node;
@@ -2157,7 +2156,8 @@ namespace ts {
             if (lookAhead(nextTokenIsOpenParen)) {
                 const result = <JSDocFunctionType>createNode(SyntaxKind.JSDocFunctionType);
                 nextToken();
-                fillSignature(SyntaxKind.ColonToken, SignatureFlags.Type | SignatureFlags.JSDoc, result);
+                result.parameters = parseJsDocParameterList();
+                result.type = (parseOptional(SyntaxKind.ColonToken) ? parseTypeOrTypePredicate() : parseColonReturnType(/*isInType*/ true)) as JSDocType;
                 return finishNode(result);
             }
             const node = <TypeReferenceNode>createNode(SyntaxKind.TypeReference);
@@ -2165,13 +2165,16 @@ namespace ts {
             return finishNode(node);
         }
 
-        function parseJSDocParameter(): ParameterDeclaration {
-            const parameter = createNode(SyntaxKind.Parameter) as ParameterDeclaration;
+        function parseJSDocParameter(): JSDocFunctionTypeParameterDeclaration {
+            //TODO: own syntax kind
+            const parameter = createNode(SyntaxKind.Parameter) as JSDocFunctionTypeParameterDeclaration;
             if (token() === SyntaxKind.ThisKeyword || token() === SyntaxKind.NewKeyword) {
-                parameter.name = parseIdentifierName();
                 parseExpected(SyntaxKind.ColonToken);
+                parameter.sort = token() === SyntaxKind.ThisKeyword ? JSDocFunctionTypeParameterDeclarationKind.This : JSDocFunctionTypeParameterDeclarationKind.New;
+            } else {
+                parameter.sort = JSDocFunctionTypeParameterDeclarationKind.Regular;
             }
-            parameter.type = parseType();
+            parameter.type = parseType(); //parsejsdoctype?
             return finishNode(parameter);
         }
 
@@ -2286,29 +2289,33 @@ namespace ts {
             returnToken: SyntaxKind.ColonToken | SyntaxKind.EqualsGreaterThanToken,
             flags: SignatureFlags,
             signature: SignatureDeclaration): void {
-            if (!(flags & SignatureFlags.JSDoc)) {
-                signature.typeParameters = parseTypeParameters();
-            }
+            signature.typeParameters = parseTypeParameters();
             signature.parameters = parseParameterList(flags);
-
-            const returnTokenRequired = returnToken === SyntaxKind.EqualsGreaterThanToken;
-            if (returnTokenRequired) {
+            if (returnToken === SyntaxKind.EqualsGreaterThanToken) {
                 parseExpected(returnToken);
                 signature.type = parseTypeOrTypePredicate();
             }
-            else if (parseOptional(returnToken)) {
-                signature.type = parseTypeOrTypePredicate();
+            else {
+                signature.type = parseColonReturnType(!!(flags & SignatureFlags.Type));
             }
-            else if (flags & SignatureFlags.Type) {
+        }
+
+        function parseColonReturnType(isInType: boolean): TypeNode | undefined {
+            if (parseOptional(SyntaxKind.ColonToken)) {
+                return parseTypeOrTypePredicate();
+            }
+            else if (isInType) {
                 const start = scanner.getTokenPos();
-                const length = scanner.getTextPos() - start;
-                const backwardToken = parseOptional(returnToken === SyntaxKind.ColonToken ? SyntaxKind.EqualsGreaterThanToken : SyntaxKind.ColonToken);
+                const backwardToken = parseOptional(SyntaxKind.EqualsGreaterThanToken);
                 if (backwardToken) {
+                    const length = scanner.getTextPos() - start;
                     // This is easy to get backward, especially in type contexts, so parse the type anyway
-                    signature.type = parseTypeOrTypePredicate();
-                    parseErrorAtPosition(start, length, Diagnostics._0_expected, tokenToString(returnToken));
+                    const type = parseTypeOrTypePredicate();
+                    parseErrorAtPosition(start, length, Diagnostics._0_expected, tokenToString(SyntaxKind.ColonToken));
+                    return type;
                 }
             }
+            return undefined;
         }
 
         function parseParameterList(flags: SignatureFlags) {
@@ -2332,7 +2339,7 @@ namespace ts {
                 setYieldContext(!!(flags & SignatureFlags.Yield));
                 setAwaitContext(!!(flags & SignatureFlags.Await));
 
-                const result = parseDelimitedList(ParsingContext.Parameters, flags & SignatureFlags.JSDoc ? parseJSDocParameter : parseParameter);
+                const result = parseDelimitedList(ParsingContext.Parameters, parseParameter);
 
                 setYieldContext(savedYieldContext);
                 setAwaitContext(savedAwaitContext);
@@ -2350,6 +2357,16 @@ namespace ts {
             // we definitely can't provide that.  However, if they're ok with an incomplete one,
             // then just return an empty set of parameters.
             return (flags & SignatureFlags.RequireCompleteParameterList) ? undefined : createMissingList<ParameterDeclaration>();
+        }
+
+        //mv?
+        function parseJsDocParameterList(): NodeArray<JSDocFunctionTypeParameterDeclaration> {
+            if (!parseExpected(SyntaxKind.OpenParenToken)) {
+                return createMissingList<JSDocFunctionTypeParameterDeclaration>();
+            }
+            const result = parseDelimitedList(ParsingContext.Parameters, parseJSDocParameter);
+            parseExpected(SyntaxKind.CloseParenToken);
+            return result;
         }
 
         function parseTypeMemberSemicolon() {

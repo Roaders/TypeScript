@@ -2085,8 +2085,26 @@ namespace ts {
         type: TypeNode;
     }
 
-    export interface JSDocFunctionType extends JSDocType, SignatureDeclaration {
+    export interface JSDocFunctionType extends JSDocType {
         kind: SyntaxKind.JSDocFunctionType;
+        parameters: NodeArray<JSDocFunctionTypeParameterDeclaration>;
+        type: JSDocType;
+    }
+
+    //rename
+    export const enum JSDocFunctionTypeParameterDeclarationKind {
+        Regular,
+        This,
+        New,
+    }
+    export interface JSDocFunctionTypeParameterDeclaration extends Declaration {
+        kind: SyntaxKind.Parameter;
+        parent: JSDocFunctionType;
+        sort: JSDocFunctionTypeParameterDeclarationKind;
+        //dotDotDotToken?: DotDotDotToken;    // Present on rest parameter
+        //questionToken?: QuestionToken;      // Present on optional parameter
+        type?: TypeNode;                    // Optional type annotation
+        //initializer?: Expression;           // Optional initializer
     }
 
     export interface JSDocVariadicType extends JSDocType {

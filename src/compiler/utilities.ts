@@ -1489,10 +1489,9 @@ namespace ts {
     }
 
     export function isJSDocConstructSignature(node: Node) {
-        return node.kind === SyntaxKind.JSDocFunctionType &&
-            (node as JSDocFunctionType).parameters.length > 0 &&
-            (node as JSDocFunctionType).parameters[0].name &&
-            ((node as JSDocFunctionType).parameters[0].name as Identifier).escapedText === "new";
+        return isJSDocFunctionType(node) &&
+            node.parameters.length > 0 &&
+            node.parameters[0].sort === JSDocFunctionTypeParameterDeclarationKind.New;
     }
 
     export function hasJSDocParameterTags(node: FunctionLikeDeclaration | SignatureDeclaration): boolean {
